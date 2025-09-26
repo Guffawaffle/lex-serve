@@ -1,3 +1,12 @@
+# 2025-09-26
+## Fixed
+- Corrected nginx healthcheck syntax (previously used invalid single-string with `CMD-SHELL` literal causing exit 127 and unhealthy container).
+## Added
+- Enforced mandatory `TUNNEL_TOKEN` via parameter expansion in `docker-compose.yml` (fail-fast if unset).
+## Notes
+- If you intentionally want to run stack without cloudflared, start only nginx: `docker compose up -d nginx`.
+- Provide a valid token in `.env` to run full stack.
+
 # Changelog
 All notable changes to this project will be documented in this file.
 

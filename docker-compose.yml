@@ -100,7 +100,8 @@ services:
       - ./cloudflared/ca:/etc/cloudflared/ca:ro
     expose: ["8080"]
     # Token mode: explicitly pass token (no credentials-file). The TOKEN contains the tunnel ID.
-    command: ["tunnel","--metrics","127.0.0.1:8080","run","--token","${TUNNEL_TOKEN}"]
+    # Fail fast if TUNNEL_TOKEN unset/empty using parameter expansion (supported by compose variable substitution)
+    command: ["tunnel","--metrics","127.0.0.1:8080","run","--token","${TUNNEL_TOKEN:?TUNNEL_TOKEN environment variable must be set in .env before running compose}" ]
     depends_on:
       nginx:
         condition: service_healthy

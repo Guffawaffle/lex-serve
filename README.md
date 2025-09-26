@@ -259,6 +259,20 @@ make up
 make status   # shows compose ps + health probe
 ```
 
+IMPORTANT: A valid Cloudflare Tunnel token must exist in your local `.env`:
+
+```
+TUNNEL_TOKEN=__REDACTED_TUNNEL_TOKEN__
+```
+
+If `TUNNEL_TOKEN` is missing, `docker compose config` (and `up`) will fail fast with a clear error.
+To run only nginx locally (no tunnel):
+
+```
+docker compose up -d nginx
+```
+
+
 ### Validate Compose
 
 ```
