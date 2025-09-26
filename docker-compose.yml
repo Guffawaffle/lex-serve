@@ -58,10 +58,8 @@ services:
           memory: 256M
     # Healthcheck: keep robust /healthz check
     healthcheck:
-      test: >
-        CMD-SHELL /bin/sh -c 'if command -v curl >/dev/null 2>&1; then curl -fsS http://localhost/healthz || exit 1; \
-        elif command -v wget >/dev/null 2>&1; then wget -qO- http://localhost/healthz >/dev/null || exit 1; \
-        else exit 0; fi'
+      # Use POSIX shell directly (alpine image includes /bin/sh, curl & wget may vary)
+      test: ["CMD", "/bin/sh", "-c", "if command -v curl >/dev/null 2>&1; then curl -fsS http://localhost/healthz || exit 1; elif command -v wget >/dev/null 2>&1; then wget -qO- http://localhost/healthz >/dev/null || exit 1; else exit 0; fi" ]
       interval: 30s
       timeout: 5s
       retries: 3
