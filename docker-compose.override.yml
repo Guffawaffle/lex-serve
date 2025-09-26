@@ -1,0 +1,31 @@
+# Local developer overrides (NOT for production)
+# This file is automatically picked up by `docker compose` and should only contain
+# non-production conveniences: host port mappings, writable mounts, extra tooling.
+# It is safe to omit in CI/CD. CI should set COMPOSE_PROJECT_NAME=smartergpt and rely on base compose.
+
+services:
+  nginx:
+    # Optional: expose HTTPS locally (avoid port 443 collision by using 8443)
+    ports:
+      - "8080:80"    # local plain HTTP (only for quick debug)
+      - "8443:443"   # local TLS endpoint
+    # Make logs writable locally for iterative config reloads (remove read_only, add tmpfs overrides if needed)
+    read_only: false
+    volumes:
+      - ./nginx/logs:/var/log/nginx
+
+  # cloudflared: (example override block; left commented to avoid schema complaints without keys)
+  #   image: ghcr.io/smartergpt/cloudflared-debug:latest
+  #   environment:
+  #     LOG_LEVEL: debug
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/metrics | grep -q cloudflared_tunnel_connections"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+  #     start_period: 15s
+
+# You can create a separate internal application network later, e.g.:
+# networks:
+#   smartergpt-app-net:
+#     driver: bridge

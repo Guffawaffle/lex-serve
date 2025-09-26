@@ -1,0 +1,64 @@
+# Guardrails & Pre-flight Checks
+
+This document explains the lightweight guard scripts in scripts/ intended to be run before commits, during CI, and before production promotion.
+
+- scripts/guard-validate.sh
+  - Runs docker compose config (syntax/structure).
+  - Ensures variables interpolated in docker-compose.yml are documented in .env.example.
+  - Ensures .gitignore contains common secret patterns.
+  - Fails if cloudflared/config.yml contains an active `noTLSVerify:` entry.
+
+- scripts/smoke-compose.sh
+  - Quick local smoke test of compose validity and presence of required non-secret config files.
+  - Ensures services that publish host ports are gated under `profiles: - dev` (so production does not publish host ports).
+
+- scripts/smoke-internal.sh and scripts/smoke-external.sh
+  - More invasive tests that expect the stack to be up.
+  - Use these in staging to validate internal TLS chains and external edge routing.
+
+When to run
+- Locally: run guard-validate.sh and smoke-compose.sh before committing major infra changes.
+- CI: include guard-validate.sh as a blocking check for pushes to protected branches.
+- Staging/Pre-prod: run smoke-internal.sh and smoke-external.sh after deployment to verify behavior.
+
+Notes
+- These scripts intentionally avoid creating or committing secrets.
+- They do not publish any host ports by default.
+- The noTLSVerify setting is only allowed commented for debugging and will make guard-validate fail if active.
+
+# Image Pinning & Scanning (Gate 9)
+
+This section describes the policy for pinning images by digest and the process for scanning images for vulnerabilities.
+
+## Image Pinning
+
+All images must be pinned by digest in the `docker-compose.yml` file. This ensures that the exact image version is used, preventing unexpected changes due to image updates. The digest is a SHA256 hash that uniquely identifies the image content.
+
+### Current Digest Pins
+
+- `nginx`: `nginx@sha256:TODO_ADD_DIGEST_HERE` # nginx:1.26-alpine
+- `cloudflared`: `cloudflare/cloudflared@sha256:TODO_ADD_DIGEST_HERE` # cloudflare/cloudflared:2025.1.0
+
+## Image Scanning
+
+Images must be scanned for vulnerabilities using Trivy and Syft. Scanning helps identify and mitigate potential security issues in the container images.
+
+### Trivy
+
+Trivy is used to scan the filesystem and configuration of the images. It reports high and critical issues that need to be addressed.
+
+### Syft
+
+Syft is used to generate a Software Bill of Materials (SBOM) for the images. The SBOM lists all the packages and dependencies in the image, helping to identify potential vulnerabilities.
+
+## Refreshing Image Digests
+
+To update the image digests in `docker-compose.yml`, use the `scripts/refresh-image-digests.sh` script. This script pulls the latest images, resolves the digests, and updates the `docker-compose.yml` file in place. It also prints a diff summary of the changes.
+
+## Policy Enforcement
+
+The image pinning and scanning policy is enforced in the CI pipeline. The pipeline will fail if any image uses `:latest` or lacks an `@sha256:` digest. Additionally, the pipeline will fail if any high or critical issues are found during the image scanning process.
+
+## Manual Steps
+
+If the digest cannot be resolved locally, the operator must manually update the `TODO_ADD_DIGEST_HERE` placeholders with the correct digests. After updating the digests, commit the changes to the `docker-compose.yml` file.

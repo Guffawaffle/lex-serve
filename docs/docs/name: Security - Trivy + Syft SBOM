@@ -1,0 +1,45 @@
+name: Security - Trivy + Syft SBOM
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+jobs:
+  security:
+    name: Repo scan & SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y curl ca-certificates
+
+      - name: Install Trivy (cli)
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+
+      - name: Install Syft (cli)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sudo sh -s -- -b /usr/local/bin
+
+      - name: Trivy - filesystem scan (fail on HIGH+CRITICAL)
+        run: |
+          trivy fs --severity HIGH,CRITICAL --exit-code 1 --no-progress .
+        # HIGH and CRITICAL will cause a non-zero exit; lower severities are not included.
+
+      - name: Trivy - config audit (fail on HIGH+CRITICAL)
+        run: |
+          trivy config --severity HIGH,CRITICAL --exit-code 1 --no-progress .
+
+      - name: Generate SBOM (Syft)
+        run: |
+          syft packages dir:. -o spdx-json > sbom-repo.spdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-repo.spdx.json
+          path: sbom-repo.spdx.json

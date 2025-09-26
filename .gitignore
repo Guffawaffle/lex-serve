@@ -1,0 +1,57 @@
+## --- smartergpt.dev secret hygiene (DO NOT REMOVE WITHOUT REVIEW) ---
+
+# Environment files (only commit sanitized example)
+.env
+.env.*
+!.env.example
+
+# Cloudflared sensitive credentials & CA bundle materials
+cloudflared/ca/
+cloudflared/*.json
+**/tunnel.json
+
+# Let's Encrypt issuance (ephemeral ACME material)
+letsencrypt/
+
+# SSL / key material (keep directory untracked; use .gitkeep if needed)
+ssl/
+nginx/certs/
+
+# Generic cryptographic artifacts
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+*.pfx
+*.p12
+
+# Logs / runtime
+*.log
+*.pid
+
+# Package/binary blobs
+cloudflared.deb
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# Node / Python potential future
+node_modules/
+__pycache__/
+dist/
+build/
+coverage/
+
+# Editor / OS detritus
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Ensure we never accidentally commit private key variants by fallback pattern
+**/*private*.pem
+**/*privkey*.pem
+

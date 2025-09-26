@@ -1,0 +1,15 @@
+tunnel: 70e73974-c4bd-4590-95b7-d6f1d722937b
+credentials-file: /etc/cloudflared/70e73974-c4bd-4590-95b7-d6f1d722937b.json
+
+originRequest:
+  connectTimeout: 10s
+  tcpKeepAlive: 2m
+  noTLSVerify: false
+  httpHostHeader: smartergpt.dev
+
+ingress:
+  - hostname: smartergpt.dev
+    service: https://localhost:8443
+  - hostname: www.smartergpt.dev
+    service: https://localhost:8443
+  - service: http_status:404

@@ -1,0 +1,16 @@
+tunnel: 70e73974-c4bd-4590-95b7-d6f1d722937b
+credentials-file: /etc/cloudflared/70e73974-c4bd-4590-95b7-d6f1d722937b.json
+
+# Global defaults for origin connections (can omit if using pure HTTP)
+originRequest:
+  connectTimeout: 10s
+  tcpKeepAlive: 2m
+  # noTLSVerify: false   # (Only relevant if you switch service: https://...)
+
+ingress:
+  - hostname: smartergpt.dev
+    service: http://localhost:8080
+  - hostname: www.smartergpt.dev
+    service: http://localhost:8080
+  # Fallback rule
+  - service: http_status:404
