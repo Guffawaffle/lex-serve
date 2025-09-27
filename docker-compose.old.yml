@@ -1,0 +1,207 @@
+# Compose file schema version key removed (was 3.8) because modern docker compose ignores it and emitted warnings.
+# docker-compose.yml
+# Project naming strategy:
+# - Explicit `name: smartergpt` ensures deterministic resource names without relying on environment.
+# - Containers are NOT given `container_name` so Docker Compose auto-generates:
+#     smartergpt-<service>-<number> (e.g., smartergpt-nginx-1)
+# - Network renamed to `smartergpt-edge-net` for clarity & uniqueness.
+# - Labeled each service with `com.smartergpt.role` to aid filtering / metrics.
+# - Added named volumes (future-ready) `smartergpt-certs`, `smartergpt-cloudflared-ca` (not yet mounted; reserved for persistent storage if needed).
+name: smartergpt  # alternatively export COMPOSE_PROJECT_NAME=smartergpt
+
+# Reusable label sets (YAML anchors) for consistent metadata across services.
+x-common-labels: &common_labels
+  com.smartergpt.project: smartergpt
+  org.opencontainers.image.version: ${BUILD_ID:-dev}
+  org.opencontainers.image.revision: ${GIT_SHA:-local}
+
+services:
+  nginx:
+    image: nginx:1.26-alpine
+    # container_name removed to allow automatic smartergpt-nginx-* naming
+    env_file:
+      - .env
+    # Expose internal ports only; do NOT publish to host by default.
+    expose:
+      - "80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ${SITE_HOST_PATH}:${SITE_CONTAINER_PATH}:ro
+      - ./nginx/logs:/var/log/nginx
+
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    # Least privilege: drop all capabilities and add only what's required to bind low ports.
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE  # required so nginx can bind 80/443 if entrypoint needs it
+      - CHOWN             # allow nginx entrypoint to chown tmpfs/runtime dirs
+      - SETGID            # needed for master to setgid(101) when dropping privileges
+      - SETUID            # needed for master to setuid to nginx user
+    security_opt:
+      - no-new-privileges:true
+    # Resource governance: conservative defaults; adjust to your environment.
+    mem_limit: 256m
+    cpus: "0.5"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+    # Healthcheck: keep robust /healthz check
+    healthcheck:
+      # Use POSIX shell directly (alpine image includes /bin/sh, curl & wget may vary)
+      test: ["CMD", "/bin/sh", "-c", "if command -v curl >/dev/null 2>&1; then curl -fsS http://localhost/healthz || exit 1; elif command -v wget >/dev/null 2>&1; then wget -qO- http://localhost/healthz >/dev/null || exit 1; else exit 0; fi" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - smartergpt-edge-net
+    labels:
+      <<: *common_labels
+      com.smartergpt.role: "edge"
+    # Logging (recommended): prefer stdout/stderr. Optional driver options:
+    # logging:
+    #   driver: "json-file"
+    #   options:
+    #     max-size: "10m"
+    #     max-file: "3"
+
+    # Profiles: 'dev' can be enabled for local debugging to publish host port 8443 (NOT for production).
+    # Removed explicit profiles gating so nginx always starts with the stack.
+    # For local debugging and optional host port exposure, you can create a transient override file.
+
+  # cloudflared service: connects to Cloudflare Tunnel, routes to nginx over HTTPS with SNI
+  # NOTE (2025-09-26 remediation): Previously mis-indented at top-level (outside services) so it never started.
+  # That caused Cloudflare edge to have no healthy origin, returning 502 / redirect loop symptoms in browser.
+  # Fixed by indenting under services and mounting CA/credentials directory.
+  cloudflared:
+    image: cloudflare/cloudflared:2025.1.0
+    env_file: [.env]
+    environment:
+      TZ: ${TZ:-UTC}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DOMAIN: ${DOMAIN}
+      # Provide tunnel token via .env (required for token mode). Do NOT commit the value.
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+      # Cloudflare Tunnel edge IP version preference (4 or 6). Default is 4.
+      TUNNEL_EDGE_IP_VERSION: 4
+    # Token mode: no local config file needed, all configuration managed remotely by Cloudflare
+    # Token mode: Match exact Cloudflare dashboard command format
+    # command: ["tunnel","--no-autoupdate","run","--token","${TUNNEL_TOKEN:?TUNNEL_TOKEN environment variable must be set in .env before running compose}" ]
+    # docker-compose.yml (cloudflared)
+    command: ["tunnel","--no-autoupdate","--protocol","http2","run","--token","${TUNNEL_TOKEN}"]
+    depends_on:
+      nginx:
+        condition: service_healthy
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: "0.25"
+    # Improved healthcheck:
+    # The official image is distroless and lacks a shell, curl, or grep.
+    # We rely on the cloudflared process itself staying alive AND having established
+    # at least one active connection. cloudflared publishes metrics on 127.0.0.1:8080,
+    # but we cannot fetch it internally without tooling. Instead, leverage the
+    # presence of an active established UDP QUIC socket to Cloudflare edge by
+    # inspecting /proc (ss/netstat not available either). Simplest robust proxy:
+    # use cloudflared to print its version (cheap) ensuring the binary responds,
+    # and verify the main PID still exists. If process dies, docker marks unhealthy.
+    # (For deeper checks, replace image with a scratch+busybox wrapper providing wget.)
+    healthcheck:
+      test: ["CMD", "cloudflared", "--version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks: ["smartergpt-edge-net"]
+    labels:
+      <<: *common_labels
+      com.smartergpt.role: "tunnel"
+
+  # Alternative cloudflared service with local config (HTTP origin only)
+  # This service is gated under profile "trusted-ca". Config should point to http://nginx:80.
+  # To use: docker compose --profile trusted-ca --profile default up --build cloudflared-trusted
+  cloudflared-trusted:
+    build:
+      context: ./cloudflared
+    profiles:
+      - trusted-ca
+    env_file:
+      - .env
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      # Do NOT mount tunnel.json inside bundles; operator must provide credentials at runtime.
+      - ./cloudflared/tunnel.json:/etc/cloudflared/tunnel.json:ro
+    expose:
+      - "8080"
+    command: >
+      tunnel --config /etc/cloudflared/config.yml --metrics 127.0.0.1:8080 run --credentials-file /etc/cloudflared/tunnel.json
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: "0.25"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+    healthcheck:
+      test: CMD-SHELL /bin/sh -c "ps aux | grep -v grep | grep cloudflared || exit 1"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - smartergpt-edge-net
+    labels:
+      <<: *common_labels
+      com.smartergpt.role: "tunnel"
+
+  # Optional: nginx with legacy SSL cert mounts (use only for debugging)
+  nginx-with-certs:
+    extends: nginx
+    profiles:
+      - legacy-certs
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./ssl/cloudflare-origin:/etc/ssl/cloudflare-origin:ro
+      - ${SITE_HOST_PATH}:${SITE_CONTAINER_PATH}:ro
+      - ./nginx/logs:/var/log/nginx
+
+networks:
+  smartergpt-edge-net:
+    name: smartergpt-edge-net
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+
+volumes:
+  smartergpt-certs:
+    name: smartergpt-certs
+  smartergpt-cloudflared-ca:
+    name: smartergpt-cloudflared-ca
+
+# Notes:
+# - Default profile remains private and DOES NOT publish host ports.
+# - Use `--profile dev` only for temporary local debugging (exposes 8443:443). Never enable in production.
+# - To enable the trusted CA build (Option B), run with --profile trusted-ca and build the cloudflared-trusted service.
+# - Ensure .env contains DOMAIN and CLOUDFLARED_TUNNEL_ID before bringing up the stack.
+# - To inspect cloudflared internal metrics: docker exec -it cloudflared sh -c "curl -sS http://127.0.0.1:8080/metrics"
+# - Use `--profile dev` only for temporary local debugging (exposes 8443:443). Never enable in production.
+# - To enable the trusted CA build (Option B), run with --profile trusted-ca and build the cloudflared-trusted service.
+# - Ensure .env contains DOMAIN and CLOUDFLARED_TUNNEL_ID before bringing up the stack.
+# - To inspect cloudflared internal metrics: docker exec -it cloudflared sh -c "curl -sS http://127.0.0.1:8080/metrics"

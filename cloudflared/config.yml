@@ -1,0 +1,17 @@
+tunnel: ${TUNNEL_TOKEN}
+credentials-file: /dev/null
+
+ingress:
+  - hostname: smartergpt.dev
+    service: https://nginx:443
+    originRequest:
+      noTLSVerify: false
+      originServerName: smartergpt.dev
+
+  - hostname: www.smartergpt.dev
+    service: https://nginx:443
+    originRequest:
+      noTLSVerify: false
+      originServerName: smartergpt.dev
+
+  - service: http_status:404
