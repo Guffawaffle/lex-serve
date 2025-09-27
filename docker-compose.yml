@@ -94,14 +94,13 @@ services:
       DOMAIN: ${DOMAIN}
       # Provide tunnel token via .env (required for token mode). Do NOT commit the value.
       TUNNEL_TOKEN: ${TUNNEL_TOKEN}
-    volumes:
-      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
-      # Mount CA + credentials directory so credentials-file path & origin CA bundle resolve.
-      - ./cloudflared/ca:/etc/cloudflared/ca:ro
+    # Token mode: no local config file needed, all configuration managed remotely by Cloudflare
     expose: ["8080"]
-    # Token mode: explicitly pass token (no credentials-file). The TOKEN contains the tunnel ID.
-    # Fail fast if TUNNEL_TOKEN unset/empty using parameter expansion (supported by compose variable substitution)
-    command: ["tunnel","--metrics","127.0.0.1:8080","run","--token","${TUNNEL_TOKEN:?TUNNEL_TOKEN environment variable must be set in .env before running compose}" ]
+    # Point localhost to nginx container IP for cloudflared connectivity
+    extra_hosts:
+      - "localhost:172.22.0.2"
+    # Token mode: Match exact Cloudflare dashboard command format
+    command: ["tunnel","--no-autoupdate","run","--token","${TUNNEL_TOKEN:?TUNNEL_TOKEN environment variable must be set in .env before running compose}" ]
     depends_on:
       nginx:
         condition: service_healthy
