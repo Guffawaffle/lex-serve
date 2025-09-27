@@ -1,7 +1,4 @@
 <<<<<<< HEAD
-## ...existing code...
-## Merged README (kept detailed operator notes)
-
 # lex-serve
 
 Nginx + Cloudflared (Docker/Compose). Env-driven, RO site mount, simple configs.
