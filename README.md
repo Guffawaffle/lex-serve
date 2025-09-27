@@ -69,6 +69,23 @@ docker compose logs --tail=20 cloudflared | grep -i registered
 docker exec nginx nginx -T | grep smartergpt.dev -n
 ```
 
+
+### Automated Health Check (Doctor Script)
+
+Run the comprehensive 4-gate health check to validate your HTTPS-first stack:
+
+```bash
+./scripts/doctor.sh
+```
+
+This automated doctor script validates:
+- **Gate 1**: Container health + nginx configuration validity
+- **Gate 2**: Internal TLS connectivity (nginx:443)
+- **Gate 3**: Zero Trust route configuration verification
+- **Gate 4**: External HTTPS via Cloudflare Edge
+
+The script provides detailed output and exits with code 0 if all gates pass, or 1 if any fail. Perfect for CI/CD pipelines or regular health monitoring.
+
 ## Cloudflared Healthcheck Strategy (2025-09-26)
 
 The `cloudflare/cloudflared` image is distroless: no `/bin/sh`, `curl`, `wget`,
@@ -200,6 +217,23 @@ curl -Ik https://smartergpt.dev | grep 'HTTP/2 200'
 docker compose logs --tail=20 cloudflared | grep -i registered
 docker exec nginx nginx -T | grep smartergpt.dev -n
 ```
+
+
+### Automated Health Check (Doctor Script)
+
+Run the comprehensive 4-gate health check to validate your HTTPS-first stack:
+
+```bash
+./scripts/doctor.sh
+```
+
+This automated doctor script validates:
+- **Gate 1**: Container health + nginx configuration validity
+- **Gate 2**: Internal TLS connectivity (nginx:443)
+- **Gate 3**: Zero Trust route configuration verification
+- **Gate 4**: External HTTPS via Cloudflare Edge
+
+The script provides detailed output and exits with code 0 if all gates pass, or 1 if any fail. Perfect for CI/CD pipelines or regular health monitoring.
 
 ## Cloudflared Healthcheck Strategy (2025-09-26)
 
