@@ -1,0 +1,19 @@
+tunnel: ${TUNNEL_TOKEN}
+credentials-file: /dev/null
+
+ingress:
+  - hostname: smartergpt.dev
+    service: https://nginx:443
+    originRequest:
+      noTLSVerify: false
+      originServerName: smartergpt.dev
+      caPool: /etc/ssl/cloudflare-origin/origin-ca.pem
+
+  - hostname: www.smartergpt.dev
+    service: https://nginx:443
+    originRequest:
+      noTLSVerify: false
+      originServerName: smartergpt.dev
+      caPool: /etc/ssl/cloudflare-origin/origin-ca.pem
+
+  - service: http_status:404
