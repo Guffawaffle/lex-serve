@@ -49,6 +49,7 @@ services:
         required: false
     volumes:
       - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ./ssl/cloudflare-origin:/etc/ssl/cloudflare-origin:ro
     environment:
       TZ: ${TZ:-UTC}
       DOMAIN: ${DOMAIN:-smartergpt.dev}
