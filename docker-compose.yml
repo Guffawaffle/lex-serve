@@ -12,6 +12,8 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./ssl/cloudflare-origin:/etc/ssl/cloudflare-origin:ro
+      # IMPORTANT: If you change SITE_CONTAINER_PATH from default (/usr/share/nginx/html),
+      # you must also update the 'root' directive in nginx/conf.d/smartergpt.dev.conf
       - ${SITE_HOST_PATH:-/srv/www/smartergpt}:${SITE_CONTAINER_PATH:-/usr/share/nginx/html}:ro
       - ./nginx/logs:/var/log/nginx
     read_only: true
