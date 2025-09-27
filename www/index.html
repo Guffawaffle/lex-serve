@@ -1,20 +1,202 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>smartergpt.dev — it lives</title>
-    <style>
-      body { font-family: ui-sans-serif, system-ui, -apple-system; margin: 4rem; }
-      .card { padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,.08); }
-      code { background: #f3f4f6; padding: .2rem .4rem; border-radius: .4rem; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <h1>🎉 smartergpt.dev</h1>
-      <p>Served by Nginx in Docker. Edit files in <code>./www</code> and <code>./nginx/conf.d</code> on the host.</p>
-      <p>Reload Nginx after config edits: <code>docker compose exec nginx nginx -s reload</code></p>
-    </div>
-  </body>
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>SmarterGPT.dev — Build clean merges from parallel PRs</title>
+	<meta name="description" content="Fan‑out tasks as multiple PRs in parallel, then build a merge pyramid from the blocks. Compute dependency order, run gates locally, and merge cleanly." />
+	<meta name="color-scheme" content="dark light" />
+	<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%2300c2ff'/%3E%3Ctext x='50' y='58' text-anchor='middle' font-size='56' font-family='system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif' fill='white'%3ES%3C/text%3E%3C/svg%3E" />
+	<style>
+		:root{
+			--bg: #0b0f14;
+			--panel:#0f1520;
+			--muted:#a8b3cf;
+			--text:#e6edf3;
+			--brand:#00c2ff;
+			--brand-2:#6a5cff;
+			--ok:#37d67a;
+			--border:#1c2533;
+			--shadow: 0 10px 30px rgba(0,0,0,.35), 0 2px 10px rgba(0,0,0,.25);
+		}
+		*{box-sizing:border-box}
+		html,body{height:100%}
+		body{
+			margin:0;
+			font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif;
+			background: radial-gradient(1200px 600px at 20% -10%, rgba(0,194,255,.2), transparent 60%), radial-gradient(1200px 600px at 120% 10%, rgba(106,92,255,.18), transparent 60%), var(--bg);
+			color:var(--text);
+			line-height:1.55;
+			letter-spacing:.1px;
+		}
+		.container{max-width:1120px;margin:0 auto;padding:24px}
+		.nav{
+			display:flex;align-items:center;justify-content:space-between;
+			padding:8px 0 12px;border-bottom:1px solid var(--border)
+		}
+		.logo{display:flex;align-items:center;gap:12px;font-weight:700}
+		.logo-dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--brand-2));box-shadow:0 0 24px rgba(0,194,255,.7)}
+		.hero{display:grid;grid-template-columns:1.15fr 0.85fr;gap:40px;padding:56px 0 20px;align-items:center}
+		@media (max-width: 900px){.hero{grid-template-columns:1fr;gap:28px;padding-top:36px}}
+		.badge{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--border);border-radius:999px;color:var(--muted);font-size:12px;background:rgba(255,255,255,.02)}
+		h1{font-size:clamp(32px,6vw,54px);line-height:1.1;margin:14px 0 10px;letter-spacing:.2px}
+		.tagline{font-size:clamp(16px,2.2vw,20px);color:#c9d6ea;margin:10px 0 26px;max-width:48ch}
+		.cta{display:flex;gap:12px;flex-wrap:wrap}
+		.button{
+			display:inline-flex;align-items:center;gap:10px;padding:12px 16px;border-radius:14px;border:1px solid var(--border);
+			background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));
+			text-decoration:none;color:var(--text);font-weight:600;box-shadow:var(--shadow)
+		}
+		.button.primary{background:linear-gradient(135deg,var(--brand),var(--brand-2));border:none}
+		.button.ghost{background:transparent}
+		.hero-card{
+			position:relative;border:1px solid var(--border);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
+			padding:18px;box-shadow:var(--shadow);overflow:hidden
+		}
+		.hero-card .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+		.hero-card .tile{
+			border:1px solid var(--border);border-radius:14px;padding:14px;background:rgba(10,14,22,.6)
+		}
+		.kicker{color:var(--muted);font-weight:600;font-size:13px;letter-spacing:.6px;text-transform:uppercase}
+		.code{
+			background:#091018;border:1px solid var(--border);border-radius:14px;padding:14px 16px;font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+			font-size:13.5px;overflow:auto
+		}
+		.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+		@media (max-width: 900px){.grid{grid-template-columns:1fr}}
+		.card{
+			border:1px solid var(--border);border-radius:16px;background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));padding:18px;box-shadow:var(--shadow)
+		}
+		.card h3{margin:4px 0 8px;font-size:18px}
+		.card p{color:#c8d3ea;margin:0}
+		.hr{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.14),transparent);margin:34px 0}
+		.footer{display:flex;gap:14px;justify-content:space-between;align-items:center;color:var(--muted);font-size:13px;padding:22px 0}
+		.footer a{color:var(--muted);text-decoration:none}
+		.pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:999px;padding:6px 10px;color:#a9b5d0;font-size:12px}
+	</style>
+</head>
+<body>
+	<header class="container nav" role="navigation">
+		<div class="logo"><span class="logo-dot" aria-hidden="true"></span><span>SmarterGPT.dev</span></div>
+		<nav class="links" aria-label="Primary">
+			<a class="pill" href="#" title="Docs">Docs</a>
+			<a class="pill" href="#" title="GitHub">GitHub</a>
+		</nav>
+	</header>
+
+	<main class="container">
+		<section class="hero">
+			<div>
+				<span class="badge" aria-label="Project status"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><circle cx="5" cy="5" r="5" fill="currentColor"/></svg> Open‑source workflow</span>
+				<h1>Build clean merges from parallel PRs</h1>
+				<p class="tagline">Fan‑out tasks as multiple PRs in parallel, then build a merge pyramid from the blocks. Compute dependency order, run gates locally, and merge cleanly.</p>
+				<div class="cta">
+					<a class="button primary" href="#" title="Get started">Get started</a>
+					<a class="button" href="#" title="View on GitHub">View on GitHub</a>
+					<a class="button ghost" href="#" title="Read the docs">Read the docs</a>
+				</div>
+			</div>
+			<div class="hero-card">
+				<div class="kicker">Runner snapshot</div>
+				<pre class="code" aria-label="Example command output"><code>$ nex-pr plan
+✓ detected 6 tasks
+✓ computed merge pyramid (3 levels)
+— level 3: 2 PRs (foundation)
+— level 2: 3 PRs (feature work)
+— level 1: 1 PR (integration)
+$ nex-pr run --local-gates
+… running unit tests, lint, type-checks, smoke
+✓ gates passed for level 3
+✓ gates passed for level 2
+✓ gates passed for level 1
+$ nex-pr merge --clean
+✓ fast‑forwarded in dependency order
+✓ all branches deleted
+🎉 Done. Merges are boring again.
+</code></pre>
+				<div class="hr" role="separator"></div>
+				<div class="grid">
+					<div class="tile"><div class="kicker">Fan‑out</div><strong>Parallel PRs</strong><p class="tagline" style="margin-top:6px">Ship slices simultaneously without stepping on toes.</p></div>
+					<div class="tile"><div class="kicker">Pyramid</div><strong>Deterministic merges</strong><p class="tagline" style="margin-top:6px">Top‑down order from computed dependencies.</p></div>
+					<div class="tile"><div class="kicker">Gates</div><strong>Local CI</strong><p class="tagline" style="margin-top:6px">Run tests and checks before you push.</p></div>
+					<div class="tile"><div class="kicker">Agents</div><strong>Prompt‑ready</strong><p class="tagline" style="margin-top:6px">Designed for human+AI collaboration.</p></div>
+				</div>
+			</div>
+		</section>
+
+		<section aria-labelledby="features">
+			<h2 id="features" class="kicker">Why SmarterGPT.dev</h2>
+			<div class="grid">
+				<article class="card" aria-label="Feature: Parallel PR fan‑out">
+					<h3>Parallel PR fan‑out</h3>
+					<p>Create focused PRs per task and work them in parallel—less context‑switching, fewer conflicts.</p>
+				</article>
+				<article class="card" aria-label="Feature: Merge pyramid">
+					<h3>Merge pyramid</h3>
+					<p>Build a clean dependency pyramid so integration happens last—and fast.</p>
+				</article>
+				<article class="card" aria-label="Feature: Dependency order">
+					<h3>Dependency order</h3>
+					<p>Automatically compute and enforce a sane merge order across branches.</p>
+				</article>
+				<article class="card" aria-label="Feature: Local gates">
+					<h3>Local gates</h3>
+					<p>Run unit tests, type checks, and lint locally before the PR even hits CI.</p>
+				</article>
+				<article class="card" aria-label="Feature: Agent‑ready prompts">
+					<h3>Agent‑ready prompts</h3>
+					<p>Ship with clear, repeatable prompts that automate the boring parts while you supervise.</p>
+				</article>
+				<article class="card" aria-label="Feature: Clean merges">
+					<h3>Clean merges</h3>
+					<p>Fast‑forward where possible, squash when it’s right, always predictable.</p>
+				</article>
+			</div>
+		</section>
+
+		<section class="hr" role="separator"></section>
+
+		<section aria-labelledby="how">
+			<h2 id="how" class="kicker">How it works</h2>
+			<div class="grid">
+				<article class="card">
+					<h3>1) Plan</h3>
+					<p>Define a crisp task list and compute dependencies. Small blocks, sharp edges.</p>
+				</article>
+				<article class="card">
+					<h3>2) Fan‑out</h3>
+					<p>Create parallel PRs with isolated scopes and shared conventions.</p>
+				</article>
+				<article class="card">
+					<h3>3) Gate & Merge</h3>
+					<p>Run local gates, then merge top‑down through the pyramid. Boring merges, happy Fridays.</p>
+				</article>
+			</div>
+		</section>
+
+		<section class="hr" role="separator"></section>
+
+		<section aria-labelledby="cta">
+			<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap">
+				<div>
+					<h3 style="margin:0 0 6px">Make merges boring again</h3>
+					<p style="margin:0;color:#c8d3ea">Spin up the runner, compute the pyramid, and go.</p>
+				</div>
+				<div class="cta">
+					<a class="button primary" href="#" title="Get started">Get started</a>
+					<a class="button" href="#" title="Runner quickstart">Runner quickstart</a>
+				</div>
+			</div>
+		</section>
+	</main>
+
+	<footer class="container footer">
+		<div>&copy; <span id="year"></span> SmarterGPT.dev</div>
+		<div class="pill">Agent‑friendly • CI‑first • Human‑in‑the‑loop</div>
+	</footer>
+	<script>
+		// small nicety
+		document.getElementById('year').textContent = new Date().getFullYear();
+	</script>
+</body>
 </html>

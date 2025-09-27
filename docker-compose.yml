@@ -28,7 +28,6 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/certs:/etc/nginx/certs:ro
-      - ./ssl/cloudflare-origin:/etc/nginx/ssl/cloudflare-origin:ro
       - ./ssl/cloudflare-origin:/etc/ssl/cloudflare-origin:ro
       - ./www:/var/www/html:ro
       - ./nginx/logs:/var/log/nginx

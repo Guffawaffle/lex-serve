@@ -55,3 +55,4 @@ coverage/
 **/*private*.pem
 **/*privkey*.pem
 
+*.code-workspace
