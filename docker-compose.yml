@@ -46,6 +46,34 @@ services:
       com.smartergpt.role: "edge"
 
   # ═══════════════════════════════════════════════════════════════════════════
+  # ENDLESSH - SSH Tarpit (traps SSH scanners indefinitely)
+  # Routes: ssh.smartergpt.dev → this service
+  # ═══════════════════════════════════════════════════════════════════════════
+  endlessh:
+    image: shizunge/endlessh-go:latest
+    command:
+      - -logtostderr
+      - -v=1
+      - -port=2222
+      - -interval_ms=10000       # 10 second delay between lines
+      - -line_length=32          # Max banner line length
+      - -max_clients=4096        # Max concurrent trapped clients
+      - -enable_prometheus       # Enable metrics export
+      - -prometheus_port=2112
+      - -geoip_supplier=ip-api   # GeoIP for dashboard (uses free ip-api.com)
+    expose: ["2222", "2112"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    cpus: "0.1"
+    restart: unless-stopped
+    networks: [lex-serve-net]
+    labels:
+      <<: *common_labels
+      com.smartergpt.role: "tarpit"
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # CLOUDFLARED - Tunnel to Cloudflare (token mode, hardened)
   # ═══════════════════════════════════════════════════════════════════════════
   cloudflared:

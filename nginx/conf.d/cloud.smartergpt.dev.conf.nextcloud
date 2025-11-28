@@ -1,0 +1,134 @@
+# cloud.smartergpt.dev - Nextcloud Configuration
+#
+# REQUIREMENTS:
+# 1. Run with --profile nextcloud: docker compose --profile nextcloud up -d
+# 2. Configure Cloudflare Zero Trust tunnel to route cloud.smartergpt.dev → nginx:443
+#
+# CLOUDFLARE ZERO TRUST SETUP:
+# 1. In Cloudflare Dashboard → Zero Trust → Access → Tunnels
+# 2. Find your tunnel and add a public hostname:
+#    - Subdomain: cloud
+#    - Domain: smartergpt.dev
+#    - Type: HTTPS
+#    - URL: nginx:443
+#    - TLS: Origin Server Name = cloud.smartergpt.dev
+
+upstream php-handler {
+  server nextcloud:9000;
+}
+
+server {
+  listen 80;
+  listen [::]:80;
+  server_name cloud.smartergpt.dev;
+
+  # Redirect to HTTPS
+  location / {
+    return 301 https://$host$request_uri;
+  }
+
+  location = /healthz {
+    access_log off;
+    add_header Content-Type text/plain;
+    return 200 'ok';
+  }
+}
+
+server {
+  listen 443 ssl;
+  listen [::]:443 ssl;
+  http2 on;
+  server_name cloud.smartergpt.dev;
+
+  # Cloudflare Origin Certificate
+  ssl_certificate     /etc/ssl/cloudflare-origin/origin.crt;
+  ssl_certificate_key /etc/ssl/cloudflare-origin/origin.key;
+
+  # TLS Configuration
+  ssl_session_timeout 1d;
+  ssl_session_cache shared:MozSSL:10m;
+  ssl_session_tickets off;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
+  ssl_prefer_server_ciphers off;
+
+  # Connection limits (higher for Nextcloud due to WebDAV)
+  limit_conn conn_per_ip 100;
+
+  # No global bandwidth limit for Nextcloud (large file transfers)
+  limit_rate 0;
+
+  # Security Headers (adjusted for Nextcloud)
+  add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "SAMEORIGIN" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+  add_header X-XSS-Protection "1; mode=block" always;
+  add_header X-Robots-Tag "noindex, nofollow" always;
+
+  # Nextcloud root (served by php-fpm container)
+  root /var/www/html;
+  index index.php index.html /index.php$request_uri;
+
+  # Upload size (8GB as per nextcloud.env)
+  client_max_body_size 8G;
+  client_body_timeout 3600s;
+  fastcgi_buffers 64 4K;
+
+  # Healthcheck
+  location = /healthz {
+    access_log off;
+    add_header Content-Type text/plain;
+    return 200 'ok';
+  }
+
+  # Nextcloud CalDAV/CardDAV
+  location = /.well-known/carddav { return 301 /remote.php/dav/; }
+  location = /.well-known/caldav { return 301 /remote.php/dav/; }
+  location = /.well-known/webfinger { return 301 /index.php/.well-known/webfinger; }
+  location = /.well-known/nodeinfo { return 301 /index.php/.well-known/nodeinfo; }
+
+  # Deny access to sensitive files
+  location ~ ^/(?:build|tests|config|lib|3rdparty|templates|data)(?:$|/) { return 404; }
+  location ~ ^/(?:\.|autotest|occ|issue|indie|db_|console) { return 404; }
+
+  # PHP handling
+  location ~ \.php(?:$|/) {
+    include fastcgi_params;
+    fastcgi_split_path_info ^(.+?\.php)(/.*)$;
+    set $path_info $fastcgi_path_info;
+    try_files $fastcgi_script_name =404;
+
+    fastcgi_param SCRIPT_FILENAME /var/www/html$fastcgi_script_name;
+    fastcgi_param PATH_INFO $path_info;
+    fastcgi_param HTTPS on;
+    fastcgi_param modHeadersAvailable true;
+    fastcgi_param front_controller_active true;
+
+    fastcgi_pass php-handler;
+    fastcgi_intercept_errors on;
+    fastcgi_request_buffering off;
+    fastcgi_read_timeout 3600s;
+  }
+
+  # Static files
+  location ~ \.(?:css|js|mjs|svg|gif|png|jpg|ico|wasm|tflite|map|ogg|flac)$ {
+    try_files $uri /index.php$request_uri;
+    add_header Cache-Control "public, max-age=15778463, immutable";
+    access_log off;
+  }
+
+  location ~ \.(?:woff2?|ttf|eot)$ {
+    try_files $uri /index.php$request_uri;
+    expires 7d;
+    access_log off;
+  }
+
+  # Default handler
+  location / {
+    try_files $uri $uri/ /index.php$request_uri;
+  }
+
+  access_log /var/log/nginx/nextcloud-access.log main_cf;
+  error_log  /var/log/nginx/nextcloud-error.log warn;
+}
