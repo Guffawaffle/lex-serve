@@ -56,3 +56,17 @@ coverage/
 **/*privkey*.pem
 
 *.code-workspace
+
+# Untracked runtime files
+.untracked/
+nginx/logs/
+ssl/
+*.log
+.env
+nextcloud.env
+mariadb/
+
+# Secrets
+*.key
+*.pem
+certs/
